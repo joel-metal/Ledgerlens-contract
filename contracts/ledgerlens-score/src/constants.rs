@@ -1,5 +1,29 @@
 #![cfg_attr(target_family = "wasm", allow(dead_code))]
 
+//! Numeric constants for the LedgerLens score contract.
+//!
+//! Many of these constants were chosen for a specific, documented reason
+//! (a threshold, cap, or window that bounds storage, resource use, or a
+//! security exposure). To keep that reasoning attached to the value, every
+//! consequential constant below carries a co-located `RATIONALE:` comment
+//! that summarizes *why* the value was chosen and links to the fuller source
+//! document. Constants whose rationale could not be found anywhere in the
+//! repository are explicitly flagged as undocumented historical choices that
+//! need review.
+//!
+//! The canonical index of every annotated constant and its rationale summary
+//! lives in `docs/constant-rationale-index.md`. When you change an annotated
+//! constant you must also revisit its rationale — see the review convention in
+//! `CONTRIBUTING.md` ("Changing an annotated numeric constant").
+//!
+//! Fuller sources referenced from this file:
+//!
+//! * `docs/configuration-safe-defaults.md` — safe defaults and their bounds.
+//! * `docs/invariants.md` — protocol invariants the constants enforce.
+//! * `docs/interface-versioning-policy.md` — `CONTRACT_VERSION` policy.
+//! * `SECURITY.md` — security-relevant bounds and threat model.
+//! * `docs/constant-rationale-index.md` — index of annotated constants.
+
 // ── Numeric cast lint gate (issue #1184) ─────────────────────────────────────
 //
 // `as` casts silently truncate, wrap, or lose sign/precision. In score, fee,
@@ -15,41 +39,103 @@
     clippy::cast_precision_loss
 )]
 
+/// RATIONALE: TTL threshold at which a score entry is considered "due" for
+/// extension. Chosen as ~30 days at Stellar's ~5s average ledger close time
+/// (30 * 24 * 60 * 12 = 518_400 ledgers) so entries are renewed well before
+/// archival. See `docs/configuration-safe-defaults.md`.
 pub const SCORE_TTL_THRESHOLD: u32 = 518_400;
+/// RATIONALE: TTL to extend a due score entry to — ~45 days (45 * 24 * 60 * 12
+/// = 777_600 ledgers), giving a comfortable margin over the threshold so a
+/// renewed entry is not immediately due again. See
+/// `docs/configuration-safe-defaults.md`.
 pub const SCORE_TTL_EXTEND_TO: u32 = 777_600;
 
 /// Maximum number of allowed gate callers in the allowlist.
+///
+/// RATIONALE: Bounds the per-call cost of iterating the allowlist during gate
+/// checks and the storage footprint of the allowlist itself. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_GATE_CALLERS: u32 = 20;
 
 /// Hard lower bound for all score values submitted to the contract.
 /// `submit_score` accepts scores in `[MIN_SCORE, MAX_SCORE]`; any value
 /// below this is rejected with [`Error::InvalidScore`].
+///
+/// RATIONALE: Scores are normalized to `0..=100`; `0` is the floor so a
+/// legitimate "no credit" score is representable. See `docs/invariants.md`.
 pub const MIN_SCORE: u32 = 0;
 
 /// Hard upper bound for all score values submitted to the contract.
+///
+/// RATIONALE: Scores are a 0–100 scale so they fit in `u8` and map cleanly to
+/// percentage-style thresholds. See `docs/invariants.md`.
 pub const MAX_SCORE: u32 = 100;
 
 /// Hard ceiling on the ring-buffer depth to bound storage costs.
+///
+/// RATIONALE: Each history entry is a stored value; capping depth bounds the
+/// worst-case storage (and rent) per asset pair. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_HISTORY_DEPTH: u32 = 50;
+/// RATIONALE: Default ring-buffer depth — a small recent-history window that
+/// keeps per-pair storage cheap while still surfacing recent score movement.
+/// See `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_HISTORY_MAX_DEPTH: u32 = 10;
+/// RATIONALE: Bounds the work (and storage writes) of a single batch submit
+/// so one transaction stays within the ledger's resource budget. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_BATCH_SIZE: u32 = 20;
+/// RATIONALE: Caps the number of score-change hooks a single asset pair can
+/// register, bounding per-submit dispatch cost. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_SCORE_CHANGE_HOOKS_PER_PAIR: u32 = 4;
+/// RATIONALE: Caps the total number of registered score-change hooks across
+/// all pairs, bounding global dispatch and storage. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_SCORE_CHANGE_HOOKS_GLOBAL: u32 = 32;
+/// RATIONALE: Only one hook may fire per dispatch to keep a single score
+/// submission's cost predictable. See `docs/configuration-safe-defaults.md`.
 pub const MAX_SCORE_CHANGE_HOOKS_PER_DISPATCH: u32 = 1;
+/// RATIONALE: Default consecutive-failure count before a misbehaving hook is
+/// disabled — tolerates transient failures without disabling a healthy hook.
+/// See `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_SCORE_HOOK_FAILURE_THRESHOLD: u32 = 3;
+/// RATIONALE: Hard ceiling on the configurable hook failure threshold so a
+/// mis-set value cannot keep a persistently failing hook enabled indefinitely.
+/// See `docs/configuration-safe-defaults.md`.
 pub const MAX_SCORE_HOOK_FAILURE_THRESHOLD: u32 = 10;
+/// RATIONALE: Asset-pair identifiers are `BASE:QUOTE` with short tickers; 9
+/// bytes bounds the stored key size. See `docs/configuration-safe-defaults.md`.
 pub const MAX_ASSET_PAIR_BYTES: u32 = 9;
+/// RATIONALE: Score commitments are 32-byte hashes (SHA-256-sized), matching
+/// the commitment scheme. See `docs/invariants.md`.
 pub const MAX_SCORE_COMMITMENT_BYTES: u32 = 32;
+/// RATIONALE: Bounds the stored dispute-bond preimage size to keep bond
+/// storage predictable. See `docs/configuration-safe-defaults.md`.
 pub const MAX_DISPUTE_BOND_PREIMAGE_BYTES: u32 = 80;
+/// RATIONALE: Bounds the stored dispute-bond salt size to keep bond storage
+/// predictable. See `docs/configuration-safe-defaults.md`.
 pub const MAX_DISPUTE_BOND_SALT_BYTES: u32 = 64;
 
 /// Maximum number of entries accepted in a single batch score read call.
+///
+/// RATIONALE: Bounds the read cost of a single batch call so it stays within
+/// the transaction's resource budget. See
+/// `docs/configuration-safe-defaults.md`.
 pub const BATCH_READ_MAX: u32 = 50;
 
 /// Default risk threshold used when no threshold has been configured by admin.
+///
+/// RATIONALE: 75 on the 0–100 scale flags only clearly elevated risk by
+/// default, avoiding noisy alerts before an admin tunes the threshold. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_RISK_THRESHOLD: u32 = 75;
 
 /// Default threshold for score jump anomaly detection.
+///
+/// RATIONALE: A 30-point jump on the 0–100 scale is a large move that is
+/// unlikely to be legitimate noise, so it is flagged by default. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_JUMP_THRESHOLD: u32 = 30;
 
 /// Semantic contract version; bump on breaking ABI changes.
@@ -69,104 +155,247 @@ pub const DEFAULT_JUMP_THRESHOLD: u32 = 30;
 /// * `5` — Added post-incident replay and reconciliation workflow (#631): emergency
 ///   freeze/unfreeze, deterministic state checksums, paginated score export, on-chain
 ///   snapshot history, reconciliation verification, and off-chain recovery tooling.
+///
+/// RATIONALE: The version is bumped only on breaking ABI changes, per the
+/// repository's compatibility policy. See `docs/interface-versioning-policy.md`.
 pub const CONTRACT_VERSION: u32 = 5;
 
 /// Hard upper bound on Merkle proof length.
+///
+/// RATIONALE: Bounds the cost of verifying a Merkle proof in a single call;
+/// 30 levels covers any realistic tree depth for the audit chain. See
+/// `docs/invariants.md`.
 pub const MAX_MERKLE_PROOF_DEPTH: u32 = 30;
+/// RATIONALE: Bounds the number of wallet/pair associations a single actor can
+/// hold, limiting storage and iteration cost. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_WALLET_PAIRS: u32 = 20;
+/// RATIONALE: Default cooldown between score submissions — 1 hour, enough to
+/// rate-limit abuse without blocking legitimate updates. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_COOLDOWN_SECS: u64 = 3_600;
+/// RATIONALE: Minimum configurable cooldown — 60 seconds, the smallest window
+/// that still meaningfully rate-limits submissions. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MIN_COOLDOWN_SECS: u64 = 60;
+/// RATIONALE: Maximum configurable cooldown — 24 hours, bounding how stale a
+/// score can become under a mis-set cooldown. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_COOLDOWN_SECS: u64 = 86_400;
+/// RATIONALE: Minimum upgrade delay — 48 hours, giving users time to react to
+/// a pending upgrade before it can be applied. See `SECURITY.md`.
 pub const MIN_UPGRADE_DELAY_SECS: u64 = 172_800;
+/// RATIONALE: Maximum upgrade delay — 14 days, bounding how long an upgrade
+/// can be stalled. See `SECURITY.md`.
 pub const MAX_UPGRADE_DELAY_SECS: u64 = 1_209_600;
+/// RATIONALE: Default upgrade delay — 48 hours, matching the minimum so the
+/// safe default is also the most responsive allowed value. See `SECURITY.md`.
 pub const DEFAULT_UPGRADE_DELAY_SECS: u64 = 172_800;
+/// RATIONALE: Bounds the number of service signers whose signatures may need
+/// to be checked, limiting per-call cost. See `SECURITY.md`.
 pub const MAX_SERVICE_SIGNERS: u32 = 10;
+/// RATIONALE: Bounds the admin signer set so multisig checks stay cheap and
+/// the signer set stays manageable. See `SECURITY.md`.
 pub const MAX_ADMIN_SIGNERS: u32 = 5;
 /// Grace period (seconds) before a newly added signer transitions from Pending to Active (issue #691).
+///
+/// RATIONALE: 1 hour gives operators a window to notice and veto an unexpected
+/// signer addition before it becomes active. See `SECURITY.md`.
 pub const DEFAULT_SIGNER_GRACE_PERIOD_SECS: u64 = 3_600; // 1 hour
+/// RATIONALE: Default staleness window — 7 days, after which cached data is
+/// considered stale. See `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_STALENESS_WINDOW_SECS: u64 = 604_800;
 
 /// Default maximum age (seconds) of an oracle's last price update before the
 /// oracle is considered stale and `get_effective_score` falls back to
 /// unadjusted confidence.  Default: 1 hour, matching `FAILOVER_STALENESS_WINDOW`.
 /// Configurable via `set_oracle_staleness_threshold` / `get_oracle_staleness_threshold`.
+///
+/// RATIONALE: 1 hour matches `FAILOVER_STALENESS_WINDOW` so oracle and
+/// failover staleness agree. See `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_ORACLE_STALENESS_THRESHOLD_SECS: u64 = 3_600;
 
 /// Maximum age (seconds) of a secondary score for it to be accepted during
 /// failover. Secondary scores older than this window cause the gate to
 /// return `false` (fail-closed). Default: 1 hour.
+///
+/// RATIONALE: 1 hour bounds how stale a failover score may be while still
+/// failing closed beyond it. See `docs/configuration-safe-defaults.md`.
 pub const FAILOVER_STALENESS_WINDOW: u64 = 3_600;
 
+/// RATIONALE: Bounds the number of paused pairs so pause/unpause bookkeeping
+/// stays cheap. See `docs/configuration-safe-defaults.md`.
 pub const MAX_PAUSED_PAIRS: u32 = 50;
+/// RATIONALE: Fixed-point scale of 10^6 gives six decimal places of decay
+/// precision without overflow in the decay arithmetic. See
+/// `docs/invariants.md`.
 pub const DECAY_FIXED_POINT_SCALE: u64 = 1_000_000;
+/// RATIONALE: Default decay lambda numerator — 0/1 means no decay by default
+/// (scores are not silently reduced until governance opts in). See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_DECAY_LAMBDA_NUM: u64 = 0;
+/// RATIONALE: Default decay lambda denominator — 1, paired with
+/// `DEFAULT_DECAY_LAMBDA_NUM` for a no-decay default. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_DECAY_LAMBDA_DEN: u64 = 1;
+/// RATIONALE: Maximum decay lambda numerator — 1, capping the decay rate at
+/// 1/1 so decay can never exceed full removal per step. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_DECAY_LAMBDA_NUM: u64 = 1;
+/// RATIONALE: Maximum decay lambda denominator — 1, paired with
+/// `MAX_DECAY_LAMBDA_NUM`. See `docs/configuration-safe-defaults.md`.
 pub const MAX_DECAY_LAMBDA_DEN: u64 = 1;
 
 /// Maximum number of counterparty links allowed per wallet per asset pair.
+///
+/// RATIONALE: Bounds per-wallet/per-pair storage and traversal cost. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_COUNTERPARTY_LINKS_PER_WALLET: u32 = 50;
 
 /// Maximum delegation chain depth to prevent unbounded traversal.
 /// Prevents DoS attacks via deep circular delegation chains.
+///
+/// RATIONALE: A small depth (5) is enough for realistic delegation chains
+/// while bounding traversal cost and blocking circular-chain DoS. See
+/// `SECURITY.md`.
 pub const MAX_DELEGATION_DEPTH: u32 = 5;
 
 // ── Score submission floor ─────────────────────────────────────────────────────
 
 /// Default high-water mark for the score floor policy.
+///
+/// RATIONALE: 80 on the 0–100 scale is a "good" score, so the floor only
+/// engages once a wallet has clearly earned it. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_SCORE_FLOOR_HWM: u32 = 80;
+/// RATIONALE: Default floor minimum — 20, a low but non-zero floor so a
+/// previously-good wallet retains some credit. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_SCORE_FLOOR_MIN: u32 = 20;
+/// RATIONALE: Minimum configurable high-water mark — 50, so the floor cannot
+/// be set so low it engages for weak scores. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MIN_SCORE_FLOOR_HWM: u32 = 50;
+/// RATIONALE: Maximum configurable high-water mark — 100, the top of the
+/// score scale. See `docs/configuration-safe-defaults.md`.
 pub const MAX_SCORE_FLOOR_HWM: u32 = 100;
+/// RATIONALE: Caps the hysteresis margin so the floor's release point cannot
+/// drift arbitrarily far from its engage point. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_HYSTERESIS_MARGIN: u32 = 50;
+/// RATIONALE: Band-state TTL threshold — ~30 days (same 518_400-ledger basis
+/// as `SCORE_TTL_THRESHOLD`). See `docs/configuration-safe-defaults.md`.
 pub const BAND_STATE_TTL_THRESHOLD: u32 = 518_400;
+/// RATIONALE: Band-state TTL extend-to — ~45 days (same 777_600-ledger basis
+/// as `SCORE_TTL_EXTEND_TO`). See `docs/configuration-safe-defaults.md`.
 pub const BAND_STATE_TTL_EXTEND_TO: u32 = 777_600;
+/// RATIONALE: Embargo TTL threshold — ~90 days (90 * 24 * 60 * 12 =
+/// 1_555_200 ledgers), longer than score TTL because embargoes are
+/// deliberately long-lived. See `docs/configuration-safe-defaults.md`.
 pub const EMBARGO_TTL_THRESHOLD: u32 = 1_555_200;
+/// RATIONALE: Embargo TTL extend-to — ~180 days (3_110_400 ledgers), keeping
+/// the same 1.5x margin over the threshold as score TTLs. See
+/// `docs/configuration-safe-defaults.md`.
 pub const EMBARGO_TTL_EXTEND_TO: u32 = 3_110_400;
 
 /// Hard ceiling on the `EmbargoedWalletIndex` so `revoke_all_embargoes` stays
 /// within a single transaction's resource budget.
+///
+/// RATIONALE: Bounds the iteration cost of a full embargo revocation. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_EMBARGOED_WALLETS: u32 = 100;
+/// RATIONALE: Default consensus threshold `k` — 2 independent sources must
+/// agree, the smallest value that is meaningfully more than one source. See
+/// `docs/invariants.md`.
 pub const DEFAULT_CONSENSUS_THRESHOLD_K: u32 = 2;
+/// RATIONALE: Default consensus epsilon — 5 points on the 0–100 scale, the
+/// tolerance within which two sources are considered to agree. See
+/// `docs/invariants.md`.
 pub const DEFAULT_CONSENSUS_EPSILON: u32 = 5;
 
 // ── Escalation / consecutive breach ──────────────────────────────────────────
 
+/// RATIONALE: Escalation-breach TTL threshold — ~30 days (same 518_400-ledger
+/// basis as `SCORE_TTL_THRESHOLD`). See `docs/configuration-safe-defaults.md`.
 pub const ESCALATION_BREACH_TTL_THRESHOLD: u32 = 518_400;
+/// RATIONALE: Escalation-breach TTL extend-to — ~45 days (same 777_600-ledger
+/// basis as `SCORE_TTL_EXTEND_TO`). See `docs/configuration-safe-defaults.md`.
 pub const ESCALATION_BREACH_TTL_EXTEND_TO: u32 = 777_600;
+/// RATIONALE: Default consecutive-breach count before escalation — 5, high
+/// enough to ignore occasional breaches but low enough to catch a pattern.
+/// See `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_ESCALATION_THRESHOLD: u32 = 5;
+/// RATIONALE: Minimum configurable escalation threshold — 2, so escalation
+/// cannot be triggered by a single isolated breach. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MIN_ESCALATION_THRESHOLD: u32 = 2;
+/// RATIONALE: Maximum configurable escalation threshold — 20, bounding how
+/// long a persistent breacher can go unescalated. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_ESCALATION_THRESHOLD: u32 = 20;
 
 // ── Model version registry ────────────────────────────────────────────────────
 
 /// Hard upper bound on the number of model versions that can be registered.
+///
+/// RATIONALE: Bounds the registry's storage and the cost of iterating it. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_MODEL_VERSIONS: u32 = 20;
 
 /// Challenge period in seconds (7 days).
+///
+/// RATIONALE: 7 days gives a challenger ample time to assemble and submit
+/// evidence before a dispute resolves. See `docs/configuration-safe-defaults.md`.
 pub const DISPUTE_CHALLENGE_PERIOD_SECS: u64 = 604_800;
 
 /// Bonus percentage added to the returned bond on timeout settlement.
+///
+/// RATIONALE: A 10% bonus compensates a challenger for the time value of a
+/// bond locked through a timeout without being punitive. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DISPUTE_BONUS_PCT: i128 = 10;
 
 /// Maximum simultaneously open disputes.
+///
+/// RATIONALE: Bounds the total dispute storage and the cost of scanning open
+/// disputes. See `docs/configuration-safe-defaults.md`.
 pub const MAX_OPEN_DISPUTES: u32 = 100;
 
 /// Maximum concurrently open disputes allowed per single challenger actor.
+///
+/// RATIONALE: Bounds per-actor dispute storage and prevents a single actor
+/// from monopolizing the open-dispute budget. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_DISPUTES_PER_ACTOR: u32 = 5;
 
+/// RATIONALE: Dispute TTL threshold — ~30 days (same 518_400-ledger basis as
+/// `SCORE_TTL_THRESHOLD`). See `docs/configuration-safe-defaults.md`.
 pub const DISPUTE_TTL_THRESHOLD: u32 = 518_400;
+/// RATIONALE: Dispute TTL extend-to — ~45 days (same 777_600-ledger basis as
+/// `SCORE_TTL_EXTEND_TO`). See `docs/configuration-safe-defaults.md`.
 pub const DISPUTE_TTL_EXTEND_TO: u32 = 777_600;
 
 /// Default reveal window for sealed-bid dispute bond: 10 minutes (600 seconds).
+///
+/// RATIONALE: 10 minutes is long enough for an honest revealer to submit but
+/// short enough to limit how long a bond stays locked. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_DISPUTE_REVEAL_WINDOW_SECS: u64 = 600;
 
 // ── Finality buffer (pending score commit window) ────────────────────────────
 
 /// Maximum finality buffer duration — 24 hours.
+///
+/// RATIONALE: Bounds how long a score commit can be held pending finality so
+/// a mis-set buffer cannot stall score availability indefinitely. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_FINALITY_BUFFER_SECS: u64 = 86_400;
 
 /// Default heartbeat alert threshold — 1 hour.
+///
+/// RATIONALE: 1 hour is long enough to ride out transient liveness blips but
+/// short enough to surface a genuinely stalled service promptly. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_HEARTBEAT_ALERT_THRESHOLD_SECS: u64 = 3_600;
 
 /// Maximum overlap window accepted by a service-key rotation — 24 hours.
@@ -189,10 +418,19 @@ pub const MAX_REVEAL_WINDOW_SECS: u64 = 604_800;
 // ── HyperLogLog unique-wallet estimation ─────────────────────────────────────
 
 /// Minimum allowed HLL precision (2^4 = 16 registers).
+///
+/// RATIONALE: Below 4 registers the HLL estimate error is too large to be
+/// useful. See `docs/configuration-safe-defaults.md`.
 pub const HLL_MIN_PRECISION: u32 = 4;
 /// Maximum allowed HLL precision (2^16 = 65536 registers).
+///
+/// RATIONALE: Above 16 registers the register array's storage cost outweighs
+/// the accuracy gain. See `docs/configuration-safe-defaults.md`.
 pub const HLL_MAX_PRECISION: u32 = 16;
 /// Default HLL precision until the admin configures one explicitly.
+///
+/// RATIONALE: 8 (256 registers) is a standard HLL default balancing accuracy
+/// against storage. See `docs/configuration-safe-defaults.md`.
 pub const HLL_DEFAULT_PRECISION: u32 = 8;
 
 // ── Quorum reduction ──────────────────────────────────────────────────────────
@@ -201,9 +439,19 @@ pub const HLL_DEFAULT_PRECISION: u32 = 8;
 
 /// Default window (seconds) for which a quorum-failure is considered recent.
 /// After this window the failure state is cleared automatically.
+///
+/// RATIONALE: 24 hours lets a transient quorum failure age out on its own
+/// without requiring manual intervention. See
+/// `docs/configuration-safe-defaults.md`.
 pub const DEFAULT_QUORUM_FAILURE_WINDOW_SECS: u64 = 86_400; // 24 hours
 
+/// RATIONALE: Bounds the number of tracked score entries so the tracked set
+/// stays within a predictable storage and iteration budget. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_TRACKED_SCORE_ENTRIES: u32 = 500;
+/// RATIONALE: Bounds the number of expiring entries processed per call so a
+/// single call stays within the transaction's resource budget. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_EXPIRING_ENTRIES_PER_CALL: u32 = 100;
 
 // ── Permissionless keeper TTL-extension reward (rent-griefing follow-up) ────
@@ -253,12 +501,21 @@ pub const MAX_GATE_FEE_TIER: i128 = 1_000_000_000;
 pub const DEFAULT_FEE_TIER_WINDOW_LEDGERS: u32 = 17_280;
 
 /// Maximum number of concurrently pending parameter-change proposals.
+///
+/// RATIONALE: Bounds the storage and review burden of the proposal queue. See
+/// `docs/configuration-safe-defaults.md`.
 pub const MAX_PENDING_PARAMETER_PROPOSALS: u32 = 10;
 
 /// Time-lock delay before a pending simple parameter change may be applied.
+///
+/// RATIONALE: 24 hours gives users and operators time to observe and react to
+/// a pending parameter change before it takes effect. See `SECURITY.md`.
 pub const DEFAULT_PARAM_CHANGE_DELAY_SECS: u64 = 86_400;
 
 /// Maximum number of entries retained in the rate-limit override audit log.
+///
+/// RATIONALE: Bounds the audit log's storage while retaining a useful recent
+/// history of overrides. See `docs/configuration-safe-defaults.md`.
 pub const MAX_RATE_LIMIT_OVERRIDE_LOG: u32 = 100;
 
 /// Operator-facing manifest fields that the drift checker treats as the

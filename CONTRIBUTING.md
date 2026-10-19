@@ -133,6 +133,24 @@ tier report.
   manifest says which tier runs it.
 - For replay or forensic workflow changes, add or update tests in `tools/replay/src/main.rs` and keep the evidence bundle deterministic and stable across reruns.
 - Keep error codes in `errors.rs` stable; append new variants rather than reordering or removing existing ones, since their numeric values are part of the deployed contract's ABI. This is enforced in CI by the `error-discriminants` job (`tools/check_error_discriminants.sh`), which fails the build if a PR renames, removes, or renumbers any discriminant that already existed on the base branch. New discriminants and new `pub const` aliases are always fine — prefer an alias over renumbering when you need a new name for an existing error.
+- **Changing an annotated numeric constant.** Consequential numeric constants (thresholds, caps,
+  windows) carry a co-located `// Rationale:` comment at their declaration summarizing *why* the
+  value was chosen and linking to the fuller source document; every such constant is also listed
+  in [`docs/constant-rationale-index.md`](docs/constant-rationale-index.md). If your PR changes
+  the value of one of these constants (or adds a new governed constant), it must also:
+  1. Update the linked rationale document so the stated reasoning still matches the new value —
+     or, if the reasoning no longer holds, replace it with the reasoning that does.
+  2. Update the constant's entry in [`docs/constant-rationale-index.md`](docs/constant-rationale-index.md)
+     (value, rationale summary, and link) so the index stays current.
+  3. Keep the `// Rationale:` comment on the declaration in sync with the document.
+
+  Reviewers must confirm the stated reasoning still holds for the new value, not just that the
+  number changed. This is enforced in CI by the `constant-rationale` job
+  (`tools/check_constant_rationale.py`), which fails if an annotated constant or an indexed entry
+  is changed without a corresponding update to its rationale document and index entry. A constant
+  whose rationale is undocumented is annotated with an explicit `// Rationale: UNDOCUMENTED`
+  note and a follow-up issue reference; do not silently leave such a constant unexplained.
+=======
 - Update `README.md` if you change contract function signatures, events, or the deployment flow in `deploy.sh`.
 - **Docs site.** `docs/` is published as a versioned mdBook site (`.github/workflows/docs.yml`): `latest/` from `main`, one snapshot per `v*` tag, and a preview per same-repo PR. Build it locally with `python3 tools/docs-site/build.py && mdbook build target/docs-site`. New pages are placed in the sidebar by audience via the keyword table in `tools/docs-site/build.py`; every page is stamped with the contract version it applies to (override with a first-line `<!-- applies-to: ... -->`). Broken internal links fail CI (`python3 tools/docs-site/check_links.py`); external links are checked by lychee with `.lycheeignore` as the allowlist.
 - **Documentation snippets are executable.** `python3 tools/check_doc_snippets.py` (CI job `doc-snippets`) checks the README and integration guides: every `` ### `fn(args) -> Ret` `` heading must match the contract signature (`Result<T, Error>` is written as `T`), every `pub struct` listing must match the source fields, and shell snippets must parse with `bash -n`. Mark fenced blocks in the info string:

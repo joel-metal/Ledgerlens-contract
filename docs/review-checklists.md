@@ -14,6 +14,11 @@ because they're violated most often by changes that don't look like they touch t
 - [ ] Does this change touch a function reachable from a read/gate context? If so, it contains no
       `unwrap`/`expect`/`panic!` reachable from external input.
       See [`docs/invariants.md` § 2](invariants.md#2-no-panic-reads).
+- [ ] Does this change alter the value of any annotated numeric constant (a threshold, cap, window,
+      or delay carrying a `RATIONALE:` comment)? If so, the PR must also state whether the linked
+      rationale still holds — updating the comment and the corresponding entry in
+      [`docs/constant-rationale-index.md`](constant-rationale-index.md) — rather than only changing
+      the number. See [`CONTRIBUTING.md` § Changing an annotated constant](../CONTRIBUTING.md#changing-an-annotated-constant).
 
 ---
 
@@ -39,6 +44,12 @@ resolution.
 - [ ] New dispute/escalation logic is bounded (`MAX_OPEN_DISPUTES`, `MAX_DISPUTES_PER_ACTOR`) and
       the bond/fee accounting nets to zero across every resolution branch (settled, timed out,
       vetoed) — check this with a test per branch, not just the happy path.
+- [ ] Any change to a governance threshold, cap, or time-lock constant (`MIN_UPGRADE_DELAY_SECS`,
+      `MAX_UPGRADE_DELAY_SECS`, `MAX_SERVICE_SIGNERS`, `MAX_ADMIN_SIGNERS`, etc.) addresses the
+      constant's co-located `RATIONALE:` comment and its entry in
+      [`docs/constant-rationale-index.md`](constant-rationale-index.md): confirm the original
+      reasoning still applies, or update both the comment and the index alongside the new value.
+      A bare number change that leaves a stale rationale in place is a review blocker.
 
 **Deep dive:** [`docs/governance.md`](governance.md),
 [`SECURITY.md` § Contract Threat Model](../SECURITY.md#contract-threat-model).

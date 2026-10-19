@@ -187,6 +187,41 @@ Rules:
    reconcile) before re-running.
 4. Close the loop on the issue with the root cause and the green run link.
 
+### Triaging repeated failures (duplicate reports)
+
+The notify step files one issue per failed run, so a persistent fault
+produces a burst of near-identical reports (e.g. #1468 / #1469 / #1470).
+Triage them as **one** incident:
+
+1. **Collect evidence for every run** in the burst — download
+   `staging-deployment-evidence` from each linked run and read
+   `staging-upgrade.log` top-down (baseline → propose → execute → verify).
+   Compare the first failing step across runs: the same step failing every
+   time is the root cause; a different step each time suggests an
+   environmental or flaky dependency.
+2. **Read the recorded status** in each run's `deploy/staging.json`:
+   - `rolled-back` — the previous WASM was restored and re-verified by the
+     health checks; staging is serving the last green version. Fix forward.
+   - `failed` — rollback did not restore a healthy instance; treat as an
+     incident (step 3 of the list above) before anything else.
+   - `proposed-pending` — the time-lock has not elapsed; not a failure.
+     Wait for the hourly schedule to complete execution and re-check.
+3. **Classify the cause:**
+   - *Workflow/script defect* (e.g. a bad gate, argument, or parsing bug in
+     `.github/workflows/staging-deploy.yml` or `scripts/staging-upgrade.sh`):
+     fix the underlying cause on a branch, land it, and let the next merge
+     re-run the pipeline. Do not re-run the failed job against the old
+     workflow — it would fail identically.
+   - *Environmental* (RPC/network outage, expired or under-funded staging
+     key, testnet reset): resolve the environment issue, then re-run the
+     failed workflow (`Re-run all jobs`) once the dependency is healthy.
+4. **Consolidate:** pick one issue as the tracking issue, link the others
+   to it, and close the duplicates with a pointer to the tracker. Record on
+   the tracker: the shared root cause, the classification
+   (workflow/script vs environmental), and the green re-run link.
+5. **Do not promote** any commit from the failing range until a staging run
+   is green again; only then close the tracking issue.
+
 ### Local rehearsal (no network)
 
 ```bash
